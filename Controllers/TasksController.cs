@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using WorkPlanner.Data;
 using WorkPlanner.Entities;
+
 using Task = WorkPlanner.Entities.Task;
 
 namespace WorkPlanner.Controllers;
@@ -9,34 +11,32 @@ namespace WorkPlanner.Controllers;
 [ApiController]
 public class TasksController : Controller
 {
+    private readonly AppDbContext _context;
 
-    private  List<Task> tasks = new List<Task>(); 
+    public TasksController(AppDbContext context)
+    {
+        _context = context;
+    }
+    
     
     
     [HttpGet]
     public IActionResult GetAllTasks()
     {
-        return Ok(tasks);
+        return Ok(_context.Tasks.ToList());
     }
 
-    [HttpGet]
-    public IActionResult GetTasksByStatus([FromQuery] int status)
+    [HttpGet("status")]
+    public IActionResult GetTasksByStatus([FromQuery] Task.TaskStatus status)
     {
-        switch (status)
-        {
-           case 0:  return Ok( tasks.Where(t => t.Status == Task.TaskStatus.Planned));
-           case 1: return Ok(  tasks.Where(t => t.Status == Task.TaskStatus.WorkingAt));
-           case 2:  return Ok(tasks.Where(t => t.Status == Task.TaskStatus.Done)); 
-           default: return BadRequest();
-        }
-        
-       
+        var tasks = _context.Tasks.Where(t => t.Status == status).ToList();
+        return Ok(tasks);
     }
 
     [HttpGet("{id}")]
     public IActionResult GetTask(Guid id)
     {
-        var _task = tasks.FirstOrDefault(t => t.ID == id);
+        var _task = _context.Tasks.FirstOrDefault(t => t.ID == id);
         if (_task == null)
         {
             return NotFound("Task not found");
@@ -53,7 +53,8 @@ public class TasksController : Controller
         }
         
         task.ID = Guid.NewGuid();
-        tasks.Add(task);
+        _context.Tasks.Add(task);
+        _context.SaveChanges();
         
         return CreatedAtAction(nameof(GetTask), new { id = task.ID }, task);
     }
@@ -67,7 +68,7 @@ public class TasksController : Controller
             return BadRequest();
         }
 
-        var existingTask = tasks.FirstOrDefault(t => t.ID == id);
+        var existingTask = _context.Tasks.FirstOrDefault(t => t.ID == id);
         if (existingTask == null)
         {
             return NotFound();
@@ -79,20 +80,35 @@ public class TasksController : Controller
         existingTask.Status = updatedTask.Status;
         existingTask.Duration = updatedTask.Duration;
         existingTask.Date = updatedTask.Date;
-
+        _context.SaveChanges();
         return NoContent(); 
     }
     
     [HttpDelete("{id}")]
     public IActionResult DeleteTask(Guid id)
     {
-        var task = tasks.FirstOrDefault(t => t.ID == id);
+        var task = _context.Tasks.FirstOrDefault(t => t.ID == id);
         if (task == null)
         {
             return NotFound();
         }
 
-        tasks.Remove(task);
+        _context.Tasks.Remove(task);
+        _context.SaveChanges();
         return NoContent(); 
     }
+
+    [HttpPatch("{id}/status")]
+    public IActionResult SetTaskStatus(Guid id, [FromQuery] Task.TaskStatus status)
+    {
+        var task = _context.Tasks.FirstOrDefault(t => t.ID == id);
+            
+        if (task == null) return NotFound();
+
+        task.Status = status;
+        _context.SaveChanges();
+            
+        return Ok("Task successfully updated");
+    }
+    
 }
